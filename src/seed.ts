@@ -12,6 +12,41 @@ async function seedDatabase() {
   try {
     console.log("Starting database seeding...");
 
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conname = 'ticket_pools_non_negative'
+        ) THEN
+          ALTER TABLE ticket_pools
+          ADD CONSTRAINT ticket_pools_non_negative CHECK (total >= 0 AND available >= 0);
+        END IF;
+      END
+      $$;
+    `);
+
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1
+          FROM pg_constraint
+          WHERE conname = 'ticket_pools_available_lte_total'
+        ) THEN
+          ALTER TABLE ticket_pools
+          ADD CONSTRAINT ticket_pools_available_lte_total CHECK (available <= total);
+        END IF;
+      END
+      $$;
+    `);
+
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS issued_tickets_event_ticket_number_uq
+      ON issued_tickets (event_id, ticket_number)
+    `);
+
     // Clear existing data
     await pool.query("TRUNCATE TABLE issued_tickets CASCADE");
     await pool.query("DELETE FROM ticket_pools");
